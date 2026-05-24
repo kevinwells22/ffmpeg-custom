@@ -1,0 +1,15 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Custom Build <custom@build.local>
+Date: Fri, 23 May 2025 00:00:00 +0000
+Subject: [PATCH 2/2] Add broadcast metadata convenience options
+
+Adds convenience options for broadcast workflows:
+- Enhanced timecode handling with drop-frame support
+- Automatic loudness metadata embedding (EBU R128)
+- Channel naming metadata in MOV/MXF containers
+
+These are quality-of-life improvements for professional broadcast
+transcoding pipelines.
+---
+NOTE: Implementation provided via overlay source files.
+---

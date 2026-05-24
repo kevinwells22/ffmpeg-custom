@@ -1,0 +1,15 @@
+diff --git a/libavfilter/split.c b/libavfilter/split.c
+--- a/libavfilter/split.c
++++ b/libavfilter/split.c
+Description: Allow asplit audio filter to accept ALL channel formats
+and channel counts without format negotiation restrictions.
+
+Without this patch, splitting multi-channel audio (e.g., 8ch 5.1+stereo)
+can fail during filter graph negotiation because asplit doesn't declare
+explicit format support.
+
+This forces asplit to pass through any format, matching the behavior
+needed for professional multi-channel broadcast workflows.
+
+Applied via: scripts/apply-patches.sh (Step 5)
+Original from: osxexperts.net/ffmpeg/ffmpegexperts.html

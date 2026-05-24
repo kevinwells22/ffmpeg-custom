@@ -1,0 +1,27 @@
+diff --git a/libavformat/movenc.c b/libavformat/movenc.c
+--- a/libavformat/movenc.c
++++ b/libavformat/movenc.c
+Description: Force-enable all audio and data tracks in MOV/MP4 output.
+
+Two changes to mov_write_tkhd_tag():
+
+1. Set track header flags to 0xF for audio and data tracks:
+   - track_enabled (0x1)
+   - track_in_movie (0x2)
+   - track_in_preview (0x4)
+   - track_size_is_aspect_ratio (0x8)
+   This ensures ALL audio tracks are visible and active in NLEs
+   (Avid, Premiere, DaVinci Resolve) rather than some being disabled.
+
+2. Set alternate_group to 0 for all tracks:
+   When tracks share a non-zero alternate_group, players treat them
+   as mutually exclusive alternatives (only one plays at a time).
+   Setting to 0 makes every track independent, which is required
+   for multi-track broadcast deliverables.
+
+Use case: ProRes MOV with 8 audio tracks for broadcast delivery
+where all tracks must be active and independently addressable.
+
+Applied via: scripts/apply-patches.sh (Step 6)
+Original from: osxexperts.net/ffmpeg/ffmpegexperts.html
+Updated for FFmpeg 7.x API (track->par->codec_type)

@@ -1,0 +1,24 @@
+diff --git a/libavformat/movenc.c b/libavformat/movenc.c
+index d614933..a30916b 100644
+--- a/libavformat/movenc.c
++++ b/libavformat/movenc.c
+@@ -2410,6 +2410,10 @@ static int mov_write_tkhd_tag(AVIOContext *pb, MOVMuxContext *mov,
+     (version == 1) ? avio_wb32(pb, 104) : avio_wb32(pb, 92); /* size */
+     ffio_wfourcc(pb, "tkhd");
+     avio_w8(pb, version);
++    if (track->par->codec_type == AVMEDIA_TYPE_AUDIO ||
++        track->par->codec_type == AVMEDIA_TYPE_DATA) /* enable all audio & data tracks */
++    avio_wb24(pb, 0xf);
++    else
+     avio_wb24(pb, flags);
+     if (version == 1) {
+         avio_wb64(pb, track->time);
+@@ -2430,7 +2434,7 @@ static int mov_write_tkhd_tag(AVIOContext *pb, MOVMuxContext *mov,
+     avio_wb32(pb, 0); /* reserved */
+     avio_wb32(pb, 0); /* reserved */
+     avio_wb16(pb, 0); /* layer */
+-    avio_wb16(pb, group); /* alternate group) */
++    avio_wb16(pb, 0x0); /* set alternate group 0 as default ) */
+     /* Volume, only for audio */
+     if (track->par->codec_type == AVMEDIA_TYPE_AUDIO)
+        avio_wb16(pb, 0x0100);
