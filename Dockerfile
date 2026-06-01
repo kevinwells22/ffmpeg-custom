@@ -57,12 +57,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     yasm \
     zlib1g-dev \
-    libssl-dev \
     python3 \
-    libva-dev \
-    libdrm-dev \
-    libvdpau-dev \
     libnuma-dev \
+    linux-headers-amd64 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create build directories
@@ -72,6 +69,15 @@ RUN mkdir -p ${BUILD_DIR} ${PREFIX} ${OUTPUT_DIR}
 RUN if [ "${JOBS}" = "0" ]; then echo "export JOBS=$(nproc)" >> /etc/profile.d/jobs.sh; \
     else echo "export JOBS=${JOBS}" >> /etc/profile.d/jobs.sh; fi
 RUN source /etc/profile.d/jobs.sh || true
+
+# --- Build OpenSSL (static) ---
+RUN cd ${BUILD_DIR} && \
+    wget -q https://github.com/openssl/openssl/releases/download/openssl-3.3.1/openssl-3.3.1.tar.gz && \
+    tar xzf openssl-3.3.1.tar.gz && \
+    cd openssl-3.3.1 && \
+    ./Configure --prefix=${PREFIX} --openssldir=${PREFIX}/ssl --libdir=lib \
+        no-shared no-tests linux-x86_64 && \
+    make -j$(nproc) && make install_sw
 
 # --- Build x264 ---
 RUN cd ${BUILD_DIR} && \
@@ -234,7 +240,7 @@ RUN cd ${BUILD_DIR}/ffmpeg-${FFMPEG_VERSION} && \
         --prefix=${PREFIX} \
         --pkg-config-flags="--static" \
         --extra-cflags="-I${PREFIX}/include" \
-        --extra-ldflags="-L${PREFIX}/lib -L${PREFIX}/lib/x86_64-linux-gnu" \
+        --extra-ldflags="-static -L${PREFIX}/lib -L${PREFIX}/lib/x86_64-linux-gnu" \
         --extra-libs="-lpthread -lm -lz -ldl -lstdc++ -lnuma" \
         --bindir=${OUTPUT_DIR} \
         \
@@ -257,8 +263,7 @@ RUN cd ${BUILD_DIR}/ffmpeg-${FFMPEG_VERSION} && \
         --enable-libsvtav1 \
         --enable-libass \
         --enable-openssl \
-        --enable-nvenc \
-        --enable-vaapi && \
+        --enable-nvenc && \
     make -j$(nproc) && \
     make install
 
@@ -274,24 +279,6 @@ FROM debian:trixie-slim AS output
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
-    libdrm2 \
-    libva2 \
-    libva-drm2 \
-    libva-x11-2 \
-    libvdpau1 \
-    libxcb1 \
-    libx11-6 \
-    libxext6 \
-    libxfixes3 \
-    libx11-xcb1 \
-    libxcb-dri3-0 \
-    libxau6 \
-    libxdmcp6 \
-    libstdc++6 \
-    libnuma1 \
-    libssl3 \
-    zlib1g \
-    libzstd1 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /output/ffmpeg /usr/local/bin/ffmpeg
