@@ -60,6 +60,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     libnuma-dev \
     linux-headers-amd64 \
+    gperf \
+    uuid-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Create build directories
@@ -205,14 +207,32 @@ RUN cd ${BUILD_DIR} && \
     meson setup build --prefix=${PREFIX} --default-library=static -Ddocs=false && \
     ninja -C build && ninja -C build install
 
-# --- Build libass (without system font provider - embedded fonts still work) ---
+# --- Build expat (for fontconfig) ---
+RUN cd ${BUILD_DIR} && \
+    wget -q https://github.com/libexpat/libexpat/releases/download/R_2_6_2/expat-2.6.2.tar.gz && \
+    tar xzf expat-2.6.2.tar.gz && \
+    cd expat-2.6.2 && \
+    ./configure --prefix=${PREFIX} --enable-static --disable-shared --without-docbook && \
+    make -j$(nproc) && make install
+
+# --- Build fontconfig (static, for libass font discovery) ---
+RUN cd ${BUILD_DIR} && \
+    wget -q https://www.freedesktop.org/software/fontconfig/release/fontconfig-2.15.0.tar.gz && \
+    tar xzf fontconfig-2.15.0.tar.gz && \
+    cd fontconfig-2.15.0 && \
+    PKG_CONFIG_PATH="${PREFIX}/lib/pkgconfig:${PREFIX}/lib/x86_64-linux-gnu/pkgconfig" \
+    ./configure --prefix=${PREFIX} --sysconfdir=/etc --enable-static --disable-shared \
+        --disable-docs --disable-nls && \
+    make -j$(nproc) && make install
+
+# --- Build libass (with fontconfig font provider) ---
 RUN cd ${BUILD_DIR} && \
     git clone --depth 1 https://github.com/libass/libass.git && \
     cd libass && \
     autoreconf -fiv && \
     PKG_CONFIG_PATH="${PREFIX}/lib/pkgconfig:${PREFIX}/lib/x86_64-linux-gnu/pkgconfig" \
     ./configure --prefix=${PREFIX} --enable-static --disable-shared \
-        --disable-require-system-font-provider && \
+        --enable-fontconfig && \
     make -j$(nproc) && make install
 
 # --- Install NVIDIA codec headers ---
@@ -262,6 +282,9 @@ RUN cd ${BUILD_DIR}/ffmpeg-${FFMPEG_VERSION} && \
         --enable-libaom \
         --enable-libsvtav1 \
         --enable-libass \
+        --enable-libfontconfig \
+        --enable-libfreetype \
+        --enable-libfribidi \
         --enable-openssl \
         --enable-nvenc && \
     make -j$(nproc) && \
