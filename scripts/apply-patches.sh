@@ -10,7 +10,6 @@
 #   2. asplit filter: unrestricted channel format passthrough
 #   3. MOV muxer: all audio/data tracks force-enabled (flags=0xF)
 #   4. ProRes encoder: default vendor = apl0 (Apple)
-#   5. channel_layout_map CLI option (channel reorder + relabel)
 #
 set -euo pipefail
 
@@ -117,29 +116,10 @@ else
 fi
 
 echo ""
-echo "[5/5] Applying channel_layout_map option patch..."
-CLM_PATCH="$(cd "$(dirname "$0")/.." && pwd)/patches/0004-add-channel-layout-map-option.patch"
-if [ ! -f "${CLM_PATCH}" ] && [ -f "/custom-patches/0004-add-channel-layout-map-option.patch" ]; then
-    CLM_PATCH="/custom-patches/0004-add-channel-layout-map-option.patch"
-fi
-
-if [ -f "${CLM_PATCH}" ]; then
-    if ! grep -q "channel_layout_map" "${FFMPEG_SRC}/fftools/ffmpeg_opt.c"; then
-        patch -d "${FFMPEG_SRC}" -p1 < "${CLM_PATCH}"
-        echo "  -> Applied channel_layout_map patch"
-    else
-        echo "  -> channel_layout_map already present (skipping)"
-    fi
-else
-    echo "  -> channel_layout_map patch file not found (skipping)"
-fi
-
-echo ""
 echo "=== Patches applied successfully ==="
 echo "Custom features added:"
 echo "  - ProRes iTunes compliance (auto BT.709 color, vendor=apl0)"
 echo "  - asplit filter: unrestricted channel format passthrough"
 echo "  - MOV muxer: all audio/data tracks force-enabled (flags=0xF)"
 echo "  - MOV muxer: alternate group set to 0 (no hidden tracks)"
-echo "  - channel_layout_map option for channel reorder + relabel"
 echo ""
