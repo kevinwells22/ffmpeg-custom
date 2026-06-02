@@ -244,6 +244,7 @@ RUN cd ${BUILD_DIR} && \
 # --- Copy custom source files ---
 COPY src/ /custom-src/
 COPY scripts/ /custom-scripts/
+COPY patches/ /custom-patches/
 
 # --- Download and build FFmpeg ---
 RUN cd ${BUILD_DIR} && \

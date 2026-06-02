@@ -1,0 +1,258 @@
+diff --git a/fftools/ffmpeg.h b/fftools/ffmpeg.h
+index 0000000..0000000 100644
+--- a/fftools/ffmpeg.h
++++ b/fftools/ffmpeg.h
+@@ -152,6 +152,7 @@
+     SpecifierOptList codec_names;
+     SpecifierOptList audio_ch_layouts;
+     SpecifierOptList audio_channels;
++    SpecifierOptList channel_layout_maps;
+     SpecifierOptList audio_sample_rate;
+     SpecifierOptList frame_rates;
+     SpecifierOptList max_frame_rates;
+diff --git a/fftools/ffmpeg_opt.c b/fftools/ffmpeg_opt.c
+index 0000000..0000000 100644
+--- a/fftools/ffmpeg_opt.c
++++ b/fftools/ffmpeg_opt.c
+@@ -1908,6 +1908,9 @@
+         { .off = OFFSET(audio_ch_layouts) },
+         "set channel layout", "layout",
+         .u1.name_canon = "channel_layout", },
++    { "channel_layout_map", OPT_TYPE_STRING, OPT_AUDIO | OPT_EXPERT | OPT_PERSTREAM | OPT_OUTPUT,
++        { .off = OFFSET(channel_layout_maps) },
++        "reorder and relabel output audio channels (e.g. 2,3,4,5,6,7,0-1:L,R,C,LFE,LS,RS,LT-RT)", "map" },
+     { "af",               OPT_TYPE_FUNC,    OPT_AUDIO | OPT_FUNC_ARG  | OPT_PERFILE | OPT_OUTPUT | OPT_HAS_CANON,
+         { .func_arg = opt_audio_filters },
+         "alias for -filter:a (apply filters to audio streams)", "filter_graph",
+diff --git a/fftools/ffmpeg_mux_init.c b/fftools/ffmpeg_mux_init.c
+index 0000000..0000000 100644
+--- a/fftools/ffmpeg_mux_init.c
++++ b/fftools/ffmpeg_mux_init.c
+@@ -410,12 +410,186 @@
+              type_str ? *type_str : '?', mux->of.index, ms->ost.index);
+ 
+     return ms;
++}
++
++static const char *clm_map_label(const char *label)
++{
++    if (!av_strcasecmp(label, "L"))   return "FL";
++    if (!av_strcasecmp(label, "R"))   return "FR";
++    if (!av_strcasecmp(label, "C"))   return "FC";
++    if (!av_strcasecmp(label, "LFE")) return "LFE";
++    if (!av_strcasecmp(label, "LS"))  return "SL";
++    if (!av_strcasecmp(label, "RS"))  return "SR";
++    if (!av_strcasecmp(label, "LT"))  return "DL";
++    if (!av_strcasecmp(label, "RT"))  return "DR";
++
++    if (!av_strcasecmp(label, "FL")  || !av_strcasecmp(label, "FR") ||
++        !av_strcasecmp(label, "FC")  || !av_strcasecmp(label, "LFE") ||
++        !av_strcasecmp(label, "SL")  || !av_strcasecmp(label, "SR") ||
++        !av_strcasecmp(label, "BL")  || !av_strcasecmp(label, "BR") ||
++        !av_strcasecmp(label, "BC")  || !av_strcasecmp(label, "DL") ||
++        !av_strcasecmp(label, "DR")  || !av_strcasecmp(label, "TFL") ||
++        !av_strcasecmp(label, "TFC") || !av_strcasecmp(label, "TFR") ||
++        !av_strcasecmp(label, "TBL") || !av_strcasecmp(label, "TBC") ||
++        !av_strcasecmp(label, "TBR"))
++        return label;
++
++    return NULL;
++}
++
++static int clm_expand_input_side(void *logctx, const char *spec,
++                                 int *src_idx, int max_src_idx,
++                                 int *nb_out)
++{
++    char *work = av_strdup(spec);
++    char *saveptr = NULL;
++    char *tok;
++    int n = 0;
++
++    if (!work)
++        return AVERROR(ENOMEM);
++
++    for (tok = av_strtok(work, ",", &saveptr); tok; tok = av_strtok(NULL, ",", &saveptr)) {
++        int a = -1, b = -1;
++
++        if (sscanf(tok, "%d-%d", &a, &b) == 2) {
++            if (a < 0 || b < 0 || n + 2 > max_src_idx) {
++                av_log(logctx, AV_LOG_ERROR, "Invalid channel index range '%s' in channel_layout_map\n", tok);
++                av_free(work);
++                return AVERROR(EINVAL);
++            }
++            src_idx[n++] = a;
++            src_idx[n++] = b;
++        } else if (sscanf(tok, "%d", &a) == 1) {
++            if (a < 0 || n + 1 > max_src_idx) {
++                av_log(logctx, AV_LOG_ERROR, "Invalid channel index '%s' in channel_layout_map\n", tok);
++                av_free(work);
++                return AVERROR(EINVAL);
++            }
++            src_idx[n++] = a;
++        } else {
++            av_log(logctx, AV_LOG_ERROR, "Invalid input map token '%s' in channel_layout_map\n", tok);
++            av_free(work);
++            return AVERROR(EINVAL);
++        }
++    }
++
++    av_free(work);
++    *nb_out = n;
++    return 0;
++}
++
++static int clm_expand_output_side(void *logctx, const char *spec,
++                                  char dst_labels[][8], int max_labels,
++                                  int *nb_out)
++{
++    char *work = av_strdup(spec);
++    char *saveptr = NULL;
++    char *tok;
++    int n = 0;
++
++    if (!work)
++        return AVERROR(ENOMEM);
++
++    for (tok = av_strtok(work, ",", &saveptr); tok; tok = av_strtok(NULL, ",", &saveptr)) {
++        char *dash = strchr(tok, '-');
++
++        if (dash) {
++            *dash = '\0';
++            dash++;
++            if (n + 2 > max_labels) {
++                av_free(work);
++                return AVERROR(EINVAL);
++            }
++            av_strlcpy(dst_labels[n++], tok, 8);
++            av_strlcpy(dst_labels[n++], dash, 8);
++        } else {
++            if (n + 1 > max_labels) {
++                av_free(work);
++                return AVERROR(EINVAL);
++            }
++            av_strlcpy(dst_labels[n++], tok, 8);
++        }
++    }
++
++    av_free(work);
++    *nb_out = n;
++    return 0;
+ }
+ 
++static int clm_build_filter(void *logctx, const char *spec, char **dst)
++{
++    const char *sep = strchr(spec, ':');
++    char *left = NULL;
++    int src_idx[64], n_src = 0;
++    char labels[64][8], mapped[64][8];
++    int n_labels = 0;
++    AVBPrint map_bp, layout_bp, out_bp;
++    int ret;
++
++    if (!sep || sep == spec || !sep[1]) {
++        av_log(logctx, AV_LOG_ERROR, "Invalid channel_layout_map format. Expected in_map:out_labels\n");
++        return AVERROR(EINVAL);
++    }
++
++    left = av_strndup(spec, sep - spec);
++    if (!left)
++        return AVERROR(ENOMEM);
++
++    ret = clm_expand_input_side(logctx, left, src_idx, FF_ARRAY_ELEMS(src_idx), &n_src);
++    if (ret < 0) {
++        av_free(left);
++        return ret;
++    }
++
++    ret = clm_expand_output_side(logctx, sep + 1, labels, FF_ARRAY_ELEMS(labels), &n_labels);
++    av_free(left);
++    if (ret < 0)
++        return ret;
++
++    if (n_src != n_labels || n_src <= 0) {
++        av_log(logctx, AV_LOG_ERROR, "channel_layout_map count mismatch: %d input channels vs %d output labels\n",
++               n_src, n_labels);
++        return AVERROR(EINVAL);
++    }
++
++    av_bprint_init(&map_bp, 0, AV_BPRINT_SIZE_UNLIMITED);
++    av_bprint_init(&layout_bp, 0, AV_BPRINT_SIZE_UNLIMITED);
++    av_bprint_init(&out_bp, 0, AV_BPRINT_SIZE_UNLIMITED);
++
++    for (int i = 0; i < n_labels; i++) {
++        const char *ml = clm_map_label(labels[i]);
++        if (!ml) {
++            av_log(logctx, AV_LOG_ERROR, "Unknown output label '%s' in channel_layout_map\n", labels[i]);
++            ret = AVERROR(EINVAL);
++            goto fail;
++        }
++        av_strlcpy(mapped[i], ml, sizeof(mapped[i]));
++        av_bprintf(&map_bp, "%s%d-%s", i ? "|" : "", src_idx[i], mapped[i]);
++        av_bprintf(&layout_bp, "%s%s", i ? "+" : "", mapped[i]);
++    }
++
++    av_bprintf(&out_bp, "channelmap=map=%s:channel_layout=%s", map_bp.str, layout_bp.str);
++    if (!av_bprint_is_complete(&out_bp)) {
++        ret = AVERROR(ENOMEM);
++        goto fail;
++    }
++
++    *dst = av_strdup(out_bp.str);
++    ret = *dst ? 0 : AVERROR(ENOMEM);
++
++fail:
++    av_bprint_finalize(&map_bp, NULL);
++    av_bprint_finalize(&layout_bp, NULL);
++    av_bprint_finalize(&out_bp, NULL);
++    return ret;
++}
++
+ static int ost_get_filters(const OptionsContext *o, AVFormatContext *oc,
+                            OutputStream *ost, char **dst)
+ {
+     const char *filters = NULL;
++    const char *channel_layout_map = NULL;
+ #if FFMPEG_OPT_FILTER_SCRIPT
+     const char *filters_script = NULL;
+ 
+@@ -480,7 +654,39 @@
+         *dst = av_strdup(filters);
+     else
+         *dst = av_strdup(ost->type == AVMEDIA_TYPE_VIDEO ? "null" : "anull");
+-    return *dst ? 0 : AVERROR(ENOMEM);
++
++    if (!*dst)
++        return AVERROR(ENOMEM);
++
++    opt_match_per_stream_str(ost, &o->channel_layout_maps, oc, ost->st, &channel_layout_map);
++    if (channel_layout_map) {
++        char *clm_filter = NULL;
++        char *combined = NULL;
++        int ret;
++
++        if (ost->type != AVMEDIA_TYPE_AUDIO) {
++            av_log(ost, AV_LOG_ERROR, "-channel_layout_map is only valid for audio streams\n");
++            return AVERROR(EINVAL);
++        }
++
++        ret = clm_build_filter(ost, channel_layout_map, &clm_filter);
++        if (ret < 0)
++            return ret;
++
++        if (!strcmp(*dst, "anull"))
++            combined = av_strdup(clm_filter);
++        else
++            combined = av_asprintf("%s,%s", clm_filter, *dst);
++
++        av_free(clm_filter);
++        if (!combined)
++            return AVERROR(ENOMEM);
++
++        av_free(*dst);
++        *dst = combined;
++    }
++
++    return 0;
+ }
+ 
+ static int parse_matrix_coeffs(void *logctx, uint16_t *dest, const char *str)
