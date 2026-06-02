@@ -261,7 +261,7 @@ RUN cd ${BUILD_DIR}/ffmpeg-${FFMPEG_VERSION} && \
         --pkg-config-flags="--static" \
         --extra-cflags="-I${PREFIX}/include" \
         --extra-ldflags="-static -L${PREFIX}/lib -L${PREFIX}/lib/x86_64-linux-gnu" \
-        --extra-libs="-lpthread -lm -lz -ldl -lstdc++ -lnuma" \
+        --extra-libs="-lharfbuzz -lfreetype -lfribidi -lfontconfig -lexpat -lpthread -lm -lz -ldl -lstdc++ -lnuma" \
         --bindir=${OUTPUT_DIR} \
         \
         --enable-gpl \
@@ -284,11 +284,14 @@ RUN cd ${BUILD_DIR}/ffmpeg-${FFMPEG_VERSION} && \
         --enable-libass \
         --enable-libfontconfig \
         --enable-libfreetype \
+        --enable-libharfbuzz \
         --enable-libfribidi \
         --enable-openssl \
         --enable-nvenc && \
     make -j$(nproc) && \
-    make install
+    make install && \
+    cp -f ${OUTPUT_DIR}/ffmpeg ${OUTPUT_DIR}/ffmpeg-static && \
+    cp -f ${OUTPUT_DIR}/ffprobe ${OUTPUT_DIR}/ffprobe-static
 
 # Verify build
 RUN ${OUTPUT_DIR}/ffmpeg -version && \
@@ -315,8 +318,8 @@ CMD ["-version"]
 
 # ------------------------------------------------------------------------------
 # Stage 3: Export target (extract binary only)
-# Use: docker build --target=export --output=./output .
+# Use: docker build --target=artifacts-export --output=./output .
 # ------------------------------------------------------------------------------
-FROM scratch AS export
-COPY --from=builder /output/ffmpeg /ffmpeg
-COPY --from=builder /output/ffprobe /ffprobe
+FROM scratch AS artifacts-export
+COPY --from=builder /output/ffmpeg-static /ffmpeg-static
+COPY --from=builder /output/ffprobe-static /ffprobe-static

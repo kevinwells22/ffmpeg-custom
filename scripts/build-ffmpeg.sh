@@ -52,7 +52,7 @@ export PKG_CONFIG_PATH="${PREFIX}/lib/pkgconfig:${PREFIX}/lib/x86_64-linux-gnu/p
     --pkg-config-flags="--static" \
     --extra-cflags="-I${PREFIX}/include -static" \
     --extra-ldflags="-L${PREFIX}/lib -static" \
-    --extra-libs="-lpthread -lm -lz -ldl" \
+    --extra-libs="-lharfbuzz -lfreetype -lfribidi -lstdc++ -lpthread -lm -lz -ldl" \
     --bindir="${OUTPUT_DIR}" \
     \
     --enable-gpl \
@@ -72,6 +72,9 @@ export PKG_CONFIG_PATH="${PREFIX}/lib/pkgconfig:${PREFIX}/lib/x86_64-linux-gnu/p
     --enable-libaom \
     --enable-libsvtav1 \
     --enable-libass \
+    --enable-libfreetype \
+    --enable-libharfbuzz \
+    --enable-libfribidi \
     \
     --enable-nvenc \
     --enable-vaapi \
@@ -147,6 +150,10 @@ echo "=== Installing FFmpeg ==="
 mkdir -p "${OUTPUT_DIR}"
 make install
 
+# Keep release artifact naming stable.
+cp -f "${OUTPUT_DIR}/ffmpeg" "${OUTPUT_DIR}/ffmpeg-static"
+cp -f "${OUTPUT_DIR}/ffprobe" "${OUTPUT_DIR}/ffprobe-static"
+
 # Verify the binary
 echo ""
 echo "=== Build Complete ==="
@@ -154,6 +161,7 @@ echo ""
 "${OUTPUT_DIR}/ffmpeg" -version
 echo ""
 echo "Binary location: ${OUTPUT_DIR}/ffmpeg"
+echo "Release artifacts: ${OUTPUT_DIR}/ffmpeg-static, ${OUTPUT_DIR}/ffprobe-static"
 echo "Binary size: $(du -h "${OUTPUT_DIR}/ffmpeg" | cut -f1)"
 echo ""
 

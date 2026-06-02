@@ -39,7 +39,7 @@ apt-get update && apt-get install -y --no-install-recommends \
 echo "=== Building static libraries ==="
 
 # --- x264 (H.264 encoder) ---
-echo "[1/12] Building x264..."
+echo "[1/13] Building x264..."
 cd "${BUILD_DIR}"
 if [ ! -d x264 ]; then
     git clone --depth 1 https://code.videolan.org/videolan/x264.git
@@ -49,7 +49,7 @@ cd x264
 make -j${JOBS} && make install
 
 # --- x265 (HEVC encoder) ---
-echo "[2/12] Building x265..."
+echo "[2/13] Building x265..."
 cd "${BUILD_DIR}"
 if [ ! -d x265_git ]; then
     git clone --depth 1 https://bitbucket.org/multicoreware/x265_git.git
@@ -64,7 +64,7 @@ cmake -G "Unix Makefiles" \
 make -j${JOBS} && make install
 
 # --- libfdk-aac (AAC encoder - non-free) ---
-echo "[3/12] Building libfdk-aac..."
+echo "[3/13] Building libfdk-aac..."
 cd "${BUILD_DIR}"
 if [ ! -d fdk-aac ]; then
     git clone --depth 1 https://github.com/mstorsjo/fdk-aac.git
@@ -75,7 +75,7 @@ autoreconf -fiv
 make -j${JOBS} && make install
 
 # --- libmp3lame (MP3 encoder) ---
-echo "[4/12] Building libmp3lame..."
+echo "[4/13] Building libmp3lame..."
 cd "${BUILD_DIR}"
 LAME_VER="3.100"
 if [ ! -d "lame-${LAME_VER}" ]; then
@@ -87,7 +87,7 @@ cd "lame-${LAME_VER}"
 make -j${JOBS} && make install
 
 # --- libopus (Opus audio codec) ---
-echo "[5/12] Building libopus..."
+echo "[5/13] Building libopus..."
 cd "${BUILD_DIR}"
 if [ ! -d opus ]; then
     git clone --depth 1 https://github.com/xiph/opus.git
@@ -98,7 +98,7 @@ autoreconf -fiv
 make -j${JOBS} && make install
 
 # --- libvpx (VP8/VP9) ---
-echo "[6/12] Building libvpx..."
+echo "[6/13] Building libvpx..."
 cd "${BUILD_DIR}"
 if [ ! -d libvpx ]; then
     git clone --depth 1 https://chromium.googlesource.com/webm/libvpx.git
@@ -112,7 +112,7 @@ cd libvpx
 make -j${JOBS} && make install
 
 # --- libaom (AV1) ---
-echo "[7/12] Building libaom..."
+echo "[7/13] Building libaom..."
 cd "${BUILD_DIR}"
 if [ ! -d aom ]; then
     git clone --depth 1 https://aomedia.googlesource.com/aom
@@ -129,7 +129,7 @@ cmake -G "Unix Makefiles" \
 make -j${JOBS} && make install
 
 # --- SVT-AV1 (faster AV1 encoder) ---
-echo "[8/12] Building SVT-AV1..."
+echo "[8/13] Building SVT-AV1..."
 cd "${BUILD_DIR}"
 if [ ! -d SVT-AV1 ]; then
     git clone --depth 1 https://gitlab.com/AOMediaCodec/SVT-AV1.git
@@ -144,7 +144,7 @@ cmake -G "Unix Makefiles" \
 make -j${JOBS} && make install
 
 # --- libass (subtitle rendering) ---
-echo "[9/12] Building libass dependencies and libass..."
+echo "[9/13] Building libass dependencies and libass..."
 cd "${BUILD_DIR}"
 # freetype
 if [ ! -d freetype ]; then
@@ -154,6 +154,27 @@ cd freetype
 ./autogen.sh
 ./configure --prefix="${PREFIX}" --enable-static --disable-shared --with-harfbuzz=no
 make -j${JOBS} && make install
+
+# harfbuzz (needed by ffmpeg drawtext in 7.x)
+cd "${BUILD_DIR}"
+if [ ! -d harfbuzz ]; then
+    git clone --depth 1 https://github.com/harfbuzz/harfbuzz.git
+fi
+cd harfbuzz
+PKG_CONFIG_PATH="${PREFIX}/lib/pkgconfig:${PREFIX}/lib/x86_64-linux-gnu/pkgconfig" \
+meson setup build --prefix="${PREFIX}" --default-library=static \
+    -Dfreetype=enabled -Dglib=disabled -Dgobject=disabled \
+    -Dcairo=disabled -Dicu=disabled -Dtests=disabled \
+    -Ddocs=disabled -Dintrospection=disabled
+ninja -C build && ninja -C build install
+
+# Rebuild freetype with harfbuzz enabled for static linkage consistency.
+cd "${BUILD_DIR}/freetype"
+make clean
+PKG_CONFIG_PATH="${PREFIX}/lib/pkgconfig:${PREFIX}/lib/x86_64-linux-gnu/pkgconfig" \
+./configure --prefix="${PREFIX}" --enable-static --disable-shared --with-harfbuzz=yes
+make -j${JOBS} && make install
+
 cd "${BUILD_DIR}"
 # fribidi
 if [ ! -d fribidi ]; then
@@ -174,7 +195,7 @@ PKG_CONFIG_PATH="${PREFIX}/lib/pkgconfig" \
 make -j${JOBS} && make install
 
 # --- libebur128 (EBU R128 loudness metering) ---
-echo "[10/12] Building libebur128..."
+echo "[10/13] Building libebur128..."
 cd "${BUILD_DIR}"
 if [ ! -d libebur128 ]; then
     git clone --depth 1 https://github.com/jiixyj/libebur128.git
@@ -187,7 +208,7 @@ cmake -G "Unix Makefiles" \
 make -j${JOBS} && make install
 
 # --- NVIDIA headers (for NVENC/NVDEC) ---
-echo "[11/12] Installing NVIDIA codec headers..."
+echo "[11/13] Installing NVIDIA codec headers..."
 cd "${BUILD_DIR}"
 if [ ! -d nv-codec-headers ]; then
     git clone --depth 1 https://git.videolan.org/git/ffmpeg/nv-codec-headers.git
@@ -196,11 +217,13 @@ cd nv-codec-headers
 make PREFIX="${PREFIX}" install
 
 # --- VAAPI (Video Acceleration API) ---
-echo "[12/12] Installing VAAPI development files..."
+echo "[12/13] Installing VAAPI development files..."
 apt-get install -y --no-install-recommends \
     libva-dev \
     libdrm-dev \
     libvdpau-dev 2>/dev/null || true
+
+echo "[13/13] Dependency build complete"
 
 echo ""
 echo "=== All dependencies built successfully ==="
