@@ -212,7 +212,7 @@ diff --git a/fftools/ffmpeg_mux_init.c b/fftools/ffmpeg_mux_init.c
  #if FFMPEG_OPT_FILTER_SCRIPT
      const char *filters_script = NULL;
  
-@@ -480,7 +654,39 @@
+@@ -480,7 +654,37 @@
          *dst = av_strdup(filters);
      else
          *dst = av_strdup(ost->type == AVMEDIA_TYPE_VIDEO ? "null" : "anull");
@@ -227,10 +227,8 @@ diff --git a/fftools/ffmpeg_mux_init.c b/fftools/ffmpeg_mux_init.c
 +        char *combined = NULL;
 +        int ret;
 +
-+        if (ost->type != AVMEDIA_TYPE_AUDIO) {
-+            av_log(ost, AV_LOG_ERROR, "-channel_layout_map is only valid for audio streams\n");
-+            return AVERROR(EINVAL);
-+        }
++        if (ost->type != AVMEDIA_TYPE_AUDIO)
++            return 0;  /* silently skip for non-audio streams */
 +
 +        ret = clm_build_filter(ost, channel_layout_map, &clm_filter);
 +        if (ret < 0)
