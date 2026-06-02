@@ -1,5 +1,4 @@
 diff --git a/fftools/ffmpeg.h b/fftools/ffmpeg.h
-index 0000000..0000000 100644
 --- a/fftools/ffmpeg.h
 +++ b/fftools/ffmpeg.h
 @@ -152,6 +152,7 @@
@@ -11,7 +10,6 @@ index 0000000..0000000 100644
      SpecifierOptList frame_rates;
      SpecifierOptList max_frame_rates;
 diff --git a/fftools/ffmpeg_opt.c b/fftools/ffmpeg_opt.c
-index 0000000..0000000 100644
 --- a/fftools/ffmpeg_opt.c
 +++ b/fftools/ffmpeg_opt.c
 @@ -1908,6 +1908,9 @@
@@ -25,7 +23,6 @@ index 0000000..0000000 100644
          { .func_arg = opt_audio_filters },
          "alias for -filter:a (apply filters to audio streams)", "filter_graph",
 diff --git a/fftools/ffmpeg_mux_init.c b/fftools/ffmpeg_mux_init.c
-index 0000000..0000000 100644
 --- a/fftools/ffmpeg_mux_init.c
 +++ b/fftools/ffmpeg_mux_init.c
 @@ -410,12 +410,186 @@
