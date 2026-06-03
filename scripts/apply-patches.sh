@@ -10,6 +10,7 @@
 #   2. asplit filter: unrestricted channel format passthrough
 #   3. MOV muxer: all audio/data tracks force-enabled (flags=0xF)
 #   4. ProRes encoder: default vendor = apl0 (Apple)
+#   5. MOV muxer: force mono_as_fc for single-channel FC tracks (QuickTime 'Center' label)
 #
 set -euo pipefail
 
@@ -28,7 +29,7 @@ fi
 echo "=== Applying custom patches to FFmpeg source: ${FFMPEG_SRC} ==="
 
 # 1. Copy ProRes iTunes compliance module
-echo "[1/4] Adding ProRes iTunes compliance auto-defaults..."
+echo "[1/5] Adding ProRes iTunes compliance auto-defaults..."
 cp "${PATCH_SRC}/fftools/ffmpeg_prores_compliance.c" "${FFMPEG_SRC}/fftools/"
 cp "${PATCH_SRC}/fftools/ffmpeg_prores_compliance.h" "${FFMPEG_SRC}/fftools/"
 
@@ -53,7 +54,7 @@ if [ -f "${ENCFILE}" ] && ! grep -q "prores_compliance" "${ENCFILE}"; then
 fi
 
 # 2. Patch asplit filter to accept all channel formats/counts
-echo "[2/4] Patching libavfilter/split.c for unrestricted channel format support..."
+echo "[2/5] Patching libavfilter/split.c for unrestricted channel format support..."
 
 SPLITFILE="${FFMPEG_SRC}/libavfilter/split.c"
 if [ -f "${SPLITFILE}" ] && ! grep -q "query_formats.*all" "${SPLITFILE}"; then
@@ -79,7 +80,7 @@ else
 fi
 
 # 3. Patch MOV muxer to force-enable all audio/data tracks
-echo "[3/4] Patching libavformat/movenc.c for force-enabled tracks..."
+echo "[3/5] Patching libavformat/movenc.c for force-enabled tracks..."
 
 MOVENC="${FFMPEG_SRC}/libavformat/movenc.c"
 if [ -f "${MOVENC}" ] && ! grep -q "enable all audio & data tracks" "${MOVENC}"; then
@@ -104,7 +105,7 @@ else
 fi
 
 # 4. Patch ProRes encoder to default vendor=apl0 for MOV output
-echo "[4/4] Patching prores_ks encoder for Apple vendor default..."
+echo "[4/5] Patching prores_ks encoder for Apple vendor default..."
 
 PRORES_KS="${FFMPEG_SRC}/libavcodec/proresenc_kostya.c"
 if [ -f "${PRORES_KS}" ] && ! grep -q "apl0.*default" "${PRORES_KS}"; then
@@ -115,6 +116,55 @@ else
     echo "  -> proresenc_kostya.c already patched or not found (skipping)"
 fi
 
+# 5. Patch MOV muxer to always label single-channel FC tracks as "Center"
+#    in QuickTime, regardless of sibling track channel counts.
+#    Neutralises the mono_as_fc suppression clause in mov_init().
+echo "[5/5] Patching movenc.c mono_as_fc suppression (single-FC always 'Center')..."
+
+MOVENC="${FFMPEG_SRC}/libavformat/movenc.c"
+if [ -f "${MOVENC}" ] && ! grep -q "OMI patch: do not suppress mono_as_fc" "${MOVENC}"; then
+    # Replace the offending suppression line with a neutralised form (0 && ...)
+    # that keeps the original expression intact for upstream merges.
+    python3 - "${MOVENC}" <<'PY'
+import re, sys
+p = sys.argv[1]
+with open(p, 'r') as f:
+    src = f.read()
+
+# Match the suppression block exactly. Whitespace-tolerant.
+pattern = re.compile(
+    r'(            )if \(stj->codecpar->codec_type == AVMEDIA_TYPE_AUDIO &&\n'
+    r'(                )\(trackj->par->ch_layout\.nb_channels != 1 \|\|\n'
+    r'                 !av_channel_layout_compare\(&trackj->par->ch_layout,\n'
+    r'                                            &\(AVChannelLayout\)AV_CHANNEL_LAYOUT_MONO\)\)\n'
+    r'(            )\)\n'
+    r'                track->mono_as_fc = -1;\n'
+)
+
+replacement = (
+    r'\1/* OMI patch: do not suppress mono_as_fc due to multi-channel siblings.\n'
+    r'\1 * Single-channel FRONT_CENTER track is always "Center" in QuickTime. */\n'
+    r'\1if (0 && stj->codecpar->codec_type == AVMEDIA_TYPE_AUDIO &&\n'
+    r'\2(trackj->par->ch_layout.nb_channels != 1 ||\n'
+    r'                 !av_channel_layout_compare(&trackj->par->ch_layout,\n'
+    r'                                            &(AVChannelLayout)AV_CHANNEL_LAYOUT_MONO))\n'
+    r'\3)\n'
+    r'                track->mono_as_fc = -1;\n'
+)
+
+new, n = pattern.subn(replacement, src, count=1)
+if n != 1:
+    print("ERROR: mono_as_fc suppression block not found in mov_init() — patch context drift", file=sys.stderr)
+    sys.exit(1)
+
+with open(p, 'w') as f:
+    f.write(new)
+print("  -> mov_init: mono_as_fc suppression neutralised (single-FC stays 'Center')")
+PY
+else
+    echo "  -> movenc.c mono_as_fc already patched or not found (skipping)"
+fi
+
 echo ""
 echo "=== Patches applied successfully ==="
 echo "Custom features added:"
@@ -122,4 +172,5 @@ echo "  - ProRes iTunes compliance (auto BT.709 color, vendor=apl0)"
 echo "  - asplit filter: unrestricted channel format passthrough"
 echo "  - MOV muxer: all audio/data tracks force-enabled (flags=0xF)"
 echo "  - MOV muxer: alternate group set to 0 (no hidden tracks)"
+echo "  - MOV muxer: single-channel FC tracks always label as 'Center' in QuickTime"
 echo ""
